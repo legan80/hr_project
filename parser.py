@@ -19,7 +19,7 @@ def hh_vacancy_parser(url):
     soup = BeautifulSoup(data.content.decode('utf-8', 'ignore'), 'lxml')
 
     # извлекаем наименование должности
-    name = soup.find('h1', attrs={'class':'bloko-header-section-1'}).text
+    name = soup.find('h1', attrs={'data-qa':'vacancy-title'})
 
     # извлекаем зарплату
     try:
