@@ -3,15 +3,33 @@ from aiogram.types import Message
 from aiogram.filters import Command, CommandStart
 from aiogram.types import ContentType, Document
 import os
+from environs import Env
+import csv
+from datetime import datetime
 
 # Импортируем функцию обработки данных
 from matching import vacancy_resume_matching
 
-BOT_TOKEN = '8164920416:AAF4hw74uhb7GMV7Q5VjdVV9D9YKRjJ4sPQ'
+env = Env()  # Создаем экземпляр класса Env
+env.read_env()  # Методом read_env() читаем файл .env и загружаем из него переменные в окружение
+
+BOT_TOKEN = env('BOT_TOKEN')
 
 # Создаём бота и диспетчер
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+# Путь к папке для сохранения данных
+DATA_FOLDER = "data"
+os.makedirs(DATA_FOLDER, exist_ok=True)
+# Путь к файлу истории
+HISTORY_FILE = os.path.join(DATA_FOLDER, "history.csv")
+
+# Проверяем, существует ли файл истории, если нет — создаём и добавляем заголовки
+if not os.path.exists(HISTORY_FILE):
+    with open(HISTORY_FILE, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["user_id", "username", "datetime_utc", "vacancy_url", "resume_file", "response_file"])
 
 # Временное хранилище данных для пользователей
 user_data = {}
@@ -25,7 +43,9 @@ async def start_command(message: Message):
 @dp.message(F.text.startswith("https://hh.ru"))
 async def handle_hh_link(message: Message):
     user_id = message.from_user.id
-    user_data[user_id] = {"url": message.text.strip()}
+    username = message.from_user.username or "Unknown"
+    datetime_utc = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_data[user_id] = {"url": message.text.strip(), "username": username, "datetime_utc": datetime_utc}
     await message.reply("Ссылка принята. Теперь отправьте PDF-файл с резюме.")
 
 # Проверка PDF-файла
@@ -38,18 +58,21 @@ async def handle_pdf(message: Message):
         await message.reply("Сначала отправьте ссылку на вакансию с hh.ru.")
         return
 
+    # Извлекаем данные пользователя
+    username = user_data[user_id].get("username", "Unknown")  # Извлекаем username
+    datetime_utc = user_data[user_id].get("datetime_utc")  # Извлекаем время
+
     # Проверяем, что файл имеет расширение .pdf
     file_name = message.document.file_name
     if not file_name.endswith(".pdf"):
         await message.reply("Ошибка: требуется файл в формате PDF.")
         return
 
-    # Сохраняем файл
+    # Сохраняем файл резюме
     file_info = await bot.get_file(message.document.file_id)
-    file_path = f"temp/{user_id}_{file_name}"
-    os.makedirs("temp", exist_ok=True)
-    await bot.download_file(file_info.file_path, file_path)
-    user_data[user_id]["resume"] = file_path
+    resume_file_path = os.path.join(DATA_FOLDER, f"{user_id}_{file_name}")
+    await bot.download_file(file_info.file_path, resume_file_path)
+    user_data[user_id]["resume"] = resume_file_path
 
     # Передаём данные на обработку
     await message.reply("Резюме получено. Обрабатываю данные, подождите...")
@@ -61,16 +84,28 @@ async def handle_pdf(message: Message):
         # Вызываем функцию обработки
         result = await vacancy_resume_matching(url, resume)
 
+        # Сохраняем результат анализа в файл
+        response_file_path = os.path.join(DATA_FOLDER, f"{user_id}_response.txt")
+        with open(response_file_path, mode="w", encoding="utf-8") as response_file:
+            response_file.write(result)
+
+        # Записываем данные в CSV
+        with open(HISTORY_FILE, mode="a", newline="", encoding="utf-8") as history_file:
+            writer = csv.writer(history_file)
+            writer.writerow([user_id, username, datetime_utc, url, resume_file_path, response_file_path])
+
         # Возвращаем результат пользователю
         await message.reply(f"Результат анализа: {result}")
     except Exception as e:
         await message.reply(f"Произошла ошибка обработки: {e}")
-    """finally:
-        # Удаляем временный файл
-        if "resume" in user_data[user_id]:
-            os.remove(user_data[user_id]["resume"])
-        user_data.pop(user_id, None)"""
 
 
 if __name__ == '__main__':
     dp.run_polling(bot)
+
+
+"""finally:
+        # Удаляем временный файл
+        if "resume" in user_data[user_id]:
+            os.remove(user_data[user_id]["resume"])
+        user_data.pop(user_id, None)"""

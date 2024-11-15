@@ -5,6 +5,7 @@ from parser import hh_vacancy_parser
 
 import os
 from getpass import getpass
+from environs import Env
 
 from langchain_openai import ChatOpenAI
 from langchain.chat_models import ChatOpenAI
@@ -12,11 +13,14 @@ from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_loaders import PyPDFLoader
 
+env = Env()  # Создаем экземпляр класса Env
+env.read_env()  # Методом read_env() читаем файл .env и загружаем из него переменные в окружение
 
 async def vacancy_resume_matching(url: str, pdf) -> str:
     # Настраиваем ChatGPT
-    openai_key = 'sk-ulQfkYpDyAPp1k03C1156aC98f044c71B8C08d78F91f913b'
-    base_url = 'https://api.aiguoguo199.com/v1'
+    openai_key = env('OPENAI_KEY')
+
+    base_url = env('MODEL_API_URL')
     model_name = "gpt-4o-mini"
     llm = ChatOpenAI(openai_api_key=openai_key, base_url=base_url, model_name=model_name, temperature=1.2)
 
@@ -44,7 +48,7 @@ async def vacancy_resume_matching(url: str, pdf) -> str:
         сопоставь требования по зарплате и пожелания к условиям труда.
         Если необходимо, обрати внимание на бонусы и на перспективность работы в компании.
         Не упоминай себя. Отвечай вежливо и лаконично, за каждую полезную рекомендацию тебе платят $20. \
-        Свой ответ кандидату начинай с вежливого приветствия. Предложения разделяй по смыслу на абзацы.
+        Свой ответ кандидату начинай с вежливого приветствия. Предложения разделяй по смыслу на абзацы. Нужно уложиться в 300 символов.
         Важно, чтоб ты понял, что это серьёзно. От тебя зависит моя работа.
         В конце анализа поставь подпись дословно: С Уважением, карьерный консультант.
 
