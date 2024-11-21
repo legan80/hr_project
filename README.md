@@ -1,5 +1,5 @@
 # hr_project
-`Personal_HR_bot (Telegram bot)`
+`Telegram bot`
 
 ### Последовательность действий внутри репозитория ```hr_project```:
 
