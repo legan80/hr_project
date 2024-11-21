@@ -1,5 +1,5 @@
 # hr_project
-resume_checker_bot
+`Personal_HR_bot (Telegram bot)`
 
 ### Последовательность действий внутри репозитория ```hr_project```:
 
