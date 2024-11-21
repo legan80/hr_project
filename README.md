@@ -9,12 +9,12 @@ resume_checker_bot
 
 2. **Создайте образ**:
    ```bash
-   docker build -t hr-telegram-bot .
+   sudo docker build -t hr-telegram-bot .
    ```
 
 3. **Запустите контейнер с монтированием локальной папки**:
    ```bash
-   docker run -d --name hr-telegram-bot-container -v $(pwd)/data:/app/data hr-telegram-bot
+   sudo docker run -d --name hr-telegram-bot-container -v $(pwd)/data:/app/data hr-telegram-bot
    ```
 
    Здесь:
