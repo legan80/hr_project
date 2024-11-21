@@ -1,23 +1,21 @@
+from core.settings import bot_token
+
+from core.utils.rag import chat_bot
+from core.utils.matching import vacancy_resume_matching
+
+from core.keyboards.menu import set_main_menu
+from lexicon.lexicon_ru import help_text_ru, services_text_ru
+
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message
 from aiogram.filters import Command, CommandStart
+from aiogram.client.bot import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.types import ContentType, Document
+
 import os
-from environs import Env
 import csv
 from datetime import datetime
-
-# Импортируем функцию обработки данных
-from matching import vacancy_resume_matching
-
-env = Env()  # Создаем экземпляр класса Env
-env.read_env()  # Методом read_env() читаем файл .env и загружаем из него переменные в окружение
-
-BOT_TOKEN = env('BOT_TOKEN')
-
-# Создаём бота и диспетчер
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
 
 # Путь к папке для сохранения данных
 DATA_FOLDER = "data"
@@ -34,10 +32,37 @@ if not os.path.exists(HISTORY_FILE):
 # Временное хранилище данных для пользователей
 user_data = {}
 
+# Создаём бота и диспетчер
+bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+dp = Dispatcher()
+
+# Настраиваем кнопку Menu
+@dp.startup()
+async def main():
+    await set_main_menu(bot)
+
 # Обработчик команды /start
 @dp.message(CommandStart())
 async def start_command(message: Message):
-    await message.reply("Привет! Отправьте ссылку на вакансию с hh.ru и после файл резюме в формате PDF.")
+    await message.answer("Привет 👋\nОтправьте ссылку на вакансию с hh.ru и после файл резюме в формате PDF.\nИли просто задайте мне вопрос из карьерного трека.")
+    # await message.answer(f"Привет, {message.from_user.first_name}! Выберите действие...",
+    #                      reply_markup=get_inline_keyboard())
+
+# @dp.callback_query(F.data.in_(['resume_analysis', 'chat_with_bot']))
+# async def process_buttons_press(callback: CallbackQuery):
+#     await callback.answer()
+
+# Этот хэндлер будет срабатывать на команду "/help"
+@dp.message(Command(commands='help'))
+async def process_help_command(message: Message):
+    await message.answer(
+        text=help_text_ru)
+
+# Этот хэндлер будет срабатывать на команду "/consult"
+@dp.message(Command(commands='consult'))
+async def process_help_command(message: Message):
+    await message.answer(
+        text=services_text_ru, parse_mode='Markdown')
 
 # Проверка ссылки
 @dp.message(F.text.startswith("https://hh.ru"))
@@ -46,7 +71,7 @@ async def handle_hh_link(message: Message):
     username = message.from_user.username or "Unknown"
     datetime_utc = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     user_data[user_id] = {"url": message.text.strip(), "username": username, "datetime_utc": datetime_utc}
-    await message.reply("Ссылка принята. Теперь отправьте PDF-файл с резюме. Размер файла не должен превышать 2 Мб.")
+    await message.reply("Ссылка принята 👍 Теперь отправьте PDF-файл с резюме. Размер файла не должен превышать 2 Мб.")
 
 # Проверка PDF-файла
 @dp.message(F.document)
@@ -71,7 +96,7 @@ async def handle_pdf(message: Message):
     # Проверяем размер файла (допустимо не более 2 МБ)
     file_size_limit = 2 * 1024 * 1024  # 2 МБ в байтах
     if message.document.file_size > file_size_limit:
-        await message.reply("Ошибка: файл слишком большой. Максимальный размер файла — 2 Мб.")
+        await message.reply("Ошибка: файл слишком большой 😲 Максимальный размер файла — 2 Мб.")
         return
 
     # Сохраняем файл резюме
@@ -88,7 +113,7 @@ async def handle_pdf(message: Message):
         resume = user_data[user_id]["resume"]
 
         # Вызываем функцию обработки
-        result = await vacancy_resume_matching(url, resume)
+        result = await vacancy_resume_matching(user_id, url, resume)
 
         # Сохраняем результат анализа в файл
         response_file_path = os.path.join(DATA_FOLDER, f"{user_id}_{datetime_utc}_response.txt")
@@ -105,6 +130,23 @@ async def handle_pdf(message: Message):
     except Exception as e:
         await message.reply(f"Произошла ошибка обработки: {e}")
 
+# @dp.message(F.text)
+# async def handle_chat_bot(message: Message):
+#     query = message.text  # Извлекаем текст сообщения от пользователя
+#     answer = chat_bot(query)
+#     await message.reply(answer)
+
+# Обработчик сообщений
+@dp.message()
+async def handle_message(message: Message):
+    user_id = message.from_user.id
+    user_input = message.text
+
+    # Получаем ответ от модели
+    ai_response = chat_bot(user_id, user_input)
+
+    # Отправляем ответ пользователю
+    await message.reply(ai_response)
 
 if __name__ == '__main__':
     dp.run_polling(bot)
